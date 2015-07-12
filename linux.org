@@ -1,0 +1,60 @@
+* samba 
+  - install samba
+  - config file in: /etc/samba/
+  - create the corresponding smb user: sudo smbpasswd -a *user*
+
+* list only folders
+
+#+BEGIN_SRC sh :cache yes :exports both :results output 
+  du ~/ --max-depth=1
+#+END_SRC
+
+#+RESULTS[6b81787736ce3a0ab67fe6e3056655af9ea754bd]:
+#+begin_example
+22576	/home/mandy/.mozilla
+4	/home/mandy/Öffentlich
+2956	/home/mandy/.config
+28	/home/mandy/.icons
+16	/home/mandy/.adobe
+4714980	/home/mandy/klinik
+4	/home/mandy/Vorlagen
+4	/home/mandy/fserver
+12	/home/mandy/.dbus
+4	/home/mandy/Dokumente
+19628	/home/mandy/Downloads
+120	/home/mandy/.rstudio-desktop
+36	/home/mandy/.compiz
+5258420	/home/mandy/ggmbh
+2940	/home/mandy/.local
+44	/home/mandy/.emacs.d
+8	/home/mandy/.ssh
+8	/home/mandy/.gnome2
+44	/home/mandy/.gnupg
+4	/home/mandy/Videos
+356	/home/mandy/Arbeitsfläche
+52	/home/mandy/.gconf
+15245532	/home/mandy/fileserver
+4	/home/mandy/.hplip
+95084	/home/mandy/.cpan
+4	/home/mandy/Musik
+64	/home/mandy/.macromedia
+4	/home/mandy/Ubuntu One
+8590040	/home/mandy/servercn
+628	/home/mandy/Bilder
+4	/home/mandy/.gnome2_private
+4	/home/mandy/server170
+110976	/home/mandy/R
+107880	/home/mandy/.cache
+36	/home/mandy/.cpanm
+28	/home/mandy/.shutter
+92	/home/mandy/.thumbnails
+34173652	/home/mandy/
+#+end_example
+
+* merge several pdf
+#+BEGIN_SRC sh :cache yes :exports both :results output 
+  gs -dNOPAUSE -sDEVICE=pdfwrite -sOUTPUTFILE=app.pdf -dBATCH application.pdf 201302cv.pdf 
+#+END_SRC
+
+#+results[4b017b6da9e8f012542d8a160c405bfcfc20b965]:
+

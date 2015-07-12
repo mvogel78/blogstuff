@@ -1,0 +1,1295 @@
+* nice to know
+** change wilcard pattern into regular expression
+   - the command glob2rx takes a string containing wildcards (such as * or ?) into an equivalent regular expression
+#+BEGIN_SRC R :session :exports both
+  glob2rx("pa??ern")
+#+END_SRC
+
+#+RESULTS:
+: ^pa..ern$
+
+   - the arguments trim.head and trim.tail could be set to determine whether or not the leading "^" or the trailing "$" should be trimmed from the result
+#+BEGIN_SRC R :session :exports both
+  glob2rx("*pa??ern",trim.head=TRUE)
+#+END_SRC
+
+#+RESULTS:
+: pa..ern$
+
+
+#+BEGIN_SRC R :session :export both
+  glob2rx("pa??e.n*",trim.tail=TRUE)
+#+END_SRC
+
+#+RESULTS:
+: ^pa..e\.n
+
+** flow charts
+*** with the Gmisc package
+    - first create a transition matrix ~tm~, i.e. the rows represent start state the columns represent end state, so ~tm[1,1]~ is the number of subjects state in state 1 and end in state 1, so ~tm[1,3]~ is the number of subjects state in state 1 and end in state 3
+
+#+BEGIN_SRC R :session :exports both :results output
+  tm <- matrix(NA,nrow=3,ncol=3)
+  tm[1,] <- 200*c(.5,.25,.25)
+  tm[2,] <- 800*c(.75,.1,.15)
+  tm[3,] <- 600*c(0,.2,.8)
+
+  tm
+#+END_SRC
+
+#+RESULTS:
+:      [,1] [,2] [,3]
+: [1,]  100   50   50
+: [2,]  600   80  120
+: [3,]    0  120  480
+
+    - a more convenient way is to tabulate start state and end state
+
+#+BEGIN_SRC R :session :exports both :results output
+  xx <- data.frame(id=1:1000,
+                   start.state=sample(1:4,size=1000,replace=T,prob=c(0.2,0.5,0.1,0.2)),
+                   end.state=sample(1:4,size=1000,replace=T,prob=c(0.1,0.3,0.2,0.4)))
+
+  tm2 <- table(xx$start.state,xx$end.state)
+  tm2
+#+END_SRC
+
+#+RESULTS:
+:    
+:       1   2   3   4
+:   1  20  63  33  77
+:   2  66 164 111 187
+:   3  16  30  11  24
+:   4  24  58  29  87
+
+    - than a simple call to ~transitionPlot()~ does the magic
+    - ~box_txt~ provides the states' names
+#+BEGIN_SRC R :session :exports both :results graphics :file gmiscdiag.png
+  plot.new() ## call plot.new because transitionPlot does not
+  transitionPlot(tm,box_txt = 1:3)
+#+END_SRC
+
+#+RESULTS:
+[[file:gmiscdiag.png]]
+
+#+BEGIN_SRC R :session :exports both :results graphics :file gmiscdiag2.png
+  plot.new() ## call plot.new because transitionPlot does not
+  transitionPlot(tm2,box_txt = paste("state",1:4))
+#+END_SRC
+
+#+RESULTS:
+[[file:gmiscdiag2.png]]
+
+   - of course you can change the appearance of the plot, e.g. color of the boxes, appearance of the arrows
+   - in a similar way text color can be changed
+
+#+BEGIN_SRC R :session :exports both :results graphics :file gmiscdiag3.png
+  plot.new() ## call plot.new because transitionPlot does not
+
+  transitionPlot(tm2,box_txt = c(paste("state",1:4)),
+                 type_of_arrow="gradient",
+                 fill_start_box=c("midnightblue","darkred","darkgreen","maroon4"),
+                 fill_end_box=c("midnightblue","darkred","darkgreen","maroon4"))
+#+END_SRC
+
+#+RESULTS:
+[[file:gmiscdiag3.png]]
+
+
+*** with the diagram package
+#+BEGIN_SRC R :session :exports both :results graphics :file flowchart.png  
+  names <- c("Source","Make a pie","Renderer")
+  m <- matrix(nrow=3,ncol=3,byrow=T,data=0)
+  m[2,1] <- 1
+  m[3,2] <- 1
+  plotmat(m,pos=3,name=names,lwd=1,box.type=c("rect","ellipse","rect"),arr.pos = 0)
+#+END_SRC
+
+
+#+BEGIN_SRC R :session :exports both :results graphics :file flowchart2.png :width 600 :height 250
+  par(mar=c(1,1,1,1))
+  openplotmat()
+  elpos <- coordinates(3)
+  fromto <- matrix(ncol=2,byrow = T,data=c(1,2,2,3))
+  nr <- nrow(fromto)
+  arrpos <- matrix(ncol=2,nrow=nr)
+  
+  for(i in 1:nr){
+      arrpos[i,] <- straightarrow(to=elpos[fromto[i,2],],
+                                  from=elpos[fromto[i,1],],
+                                  lwd = 2, arr.pos = 0.68,
+                                  arr.length = 0.5)
+  }
+  
+  textrect(elpos[1,],0.1,0.09,lab="Source",shadow.col = NULL)
+  textellipse(elpos[2,],0.1,0.09,lab="Make a pie",shadow.col = NULL)
+  textrect(elpos[3,],0.1,0.09,lab="Render",shadow.col = NULL)
+  
+  text(arrpos[1,1]-0.07,arrpos[1,2]-0.08,"Data")
+  text(arrpos[2,1]-0.06,arrpos[2,2]-0.08,"Graphics")
+#+END_SRC
+
+#+RESULTS:
+[[file:flowchart2.png]]
+
+* R and Excel
+** create an Excel file from data frame and color the cells given by some indices
+   - ~data~ the following function takes an data.frame containing the data as argument
+   - the second argument is also a data frame containing the indices of the cells which should be coloured, /row/ and /column/ are assumed the be the names of these columns  (can be changed through the resp arguments)
+   - the ~filename~ is set through filename (default: /date+excelfile.xlsx/) and
+   - the fill color  through ~color~ (default: red - for a list of colors type XLC after the XLConnect package is loaded)
+
+#+BEGIN_SRC R :session :exports both :eval never
+  require(XLConnect)
+  create.excel <- function(data,index,color=53,filename=NULL,row="row",column="column"){
+      names(index)[names(index)==row] <- "row"
+      names(index)[names(index)==column] <- "column"
+      if(is.null(filename))filename <- paste0(gsub("-","",as.character(Sys.Date())),"excelfile.xlsx")
+      wb <- loadWorkbook(filename,create=T)
+      createSheet(wb,"conspvalues")
+      writeWorksheet(wb,data,"conspvalues")
+      style <- createCellStyle(wb,name="style")
+      setFillPattern(style,fill=XLC$"FILL.SOLID_FOREGROUND")
+      setFillForegroundColor(style,color=10)
+      setCellStyle(wb,sheet = "conspvalues",
+                           row=index$row + 1,
+                           col=index$column,
+                           cellstyle = style)
+      return(saveWorkbook(wb))
+  }
+
+  ## example
+  cells <- data.frame(x=sample(nrow(mtcars)),y=sample(ncol(mtcars),size=nrow(mtcars),replace = T))
+  create.excel(mtcars,cells,row="x",column="y")
+#+END_SRC
+
+* Data in Tables
+** R - confidence intervals for risk ratio, odds ratio, attributable risk (resp. absolute risk reduction), cond. MLE odds ratio
+   - generate the data, and table them
+#+BEGIN_SRC R :session :exports both
+  obese <- sample(c(T,F),size=1000,replace=T)
+  mi <- (obese + sample(c(-1,0,1),prob = c(0.3,0.35,0.35),size=1000,replace=T)) > 0
+
+  table(obese,mi)
+#+END_SRC
+
+   - use the ~twoby2~ function to get the ratios incl. the confidence intervals
+   - the risk difference (resp. attributable risk (AR), absolute risk reduction (ARR)) is also calculated
+#+BEGIN_SRC R :session :exports both :results output
+  require(Epi)
+  twoby2(obese,mi)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+2 by 2 table analysis: 
+------------------------------------------------------ 
+Outcome   : FALSE 
+Comparing : FALSE vs. TRUE 
+
+      FALSE TRUE    P(FALSE) 95% conf. interval
+FALSE   307  172      0.6409    0.5969   0.6827
+TRUE    159  362      0.3052    0.2671   0.3461
+
+                                   95% conf. interval
+             Relative Risk: 2.1001    1.8151   2.4299
+         Sample Odds Ratio: 4.0637    3.1213   5.2907
+Conditional MLE Odds Ratio: 4.0575    3.0942   5.3387
+    Probability difference: 0.3357    0.2758   0.3921
+
+             Exact P-value: 0 
+        Asymptotic P-value: 0 
+------------------------------------------------------
+#+end_example
+
+** R confidence intervals for odds ratio for matched pairs
+   - the confidence interval for odds ratio for matched pairs is B/C * exp(+-1.96*sqrt(1/B + 1/C)) where B and C are the counts of discordant pairs
+   - here is a example with anemia in mothers ~ low birth weight
+   
+#+BEGIN_SRC R :session :exports both :results output
+  bw <- as.table(matrix(c(13,27,8,22),dimnames=list(c("anemia","no anemia"),c("low bw","normal bw")),byrow=T,nrow=2))
+  bw
+#+END_SRC
+
+#+RESULTS:
+:           low bw normal bw
+: anemia        13        27
+: no anemia      8        22
+
+   
+   - do the calculations per hand:
+
+#+BEGIN_SRC R :session :exports both :results output
+  print(paste("odds ratio:",27/8))
+  27/8 * exp(c(-1,1)*1.96*sqrt(1/27 + 1/8))
+#+END_SRC
+
+#+RESULTS:
+: [1] "odds ratio: 3.375"
+: [1] 1.533297 7.428844
+
+   - or use the function from the ~PropCIs~ package
+
+#+BEGIN_SRC R :session :exports both :results output
+  require(PropCIs,quietly=T)
+  oddsratioci.mp(8,27,0.95)
+#+END_SRC
+
+#+RESULTS:
+: 
+: 
+: 
+: data:  
+: 
+: 95 percent confidence interval:
+:  1.562965 7.287833
+
+* ROC 
+** data
+#+BEGIN_SRC R :session :exports both
+  data <- data.frame(count=sample(60:1000,1000,prob = dweibull(seq(0,100,l=941),2,20),replace = T),
+                     vol=sample(seq(7,14,by=0.1),size = 1000,prob = c(seq(1,10,l=54),seq(10,1,l=17)),replace=T))
+  
+  data$probs <- ((data$count+data$vol/2)-min(data$count+data$vol/2))/(max(data$count+data$vol/2)-min(data$count+data$vol/2))
+  
+  data$tt <- apply(data,1,function(x){rbinom(1,1,prob=max(c(0,0.6-x["probs"])))})
+  
+  data$tt <- rbinom(1,1,prob = ((data$count+data$vol/2)-min(data$count+data$vol/2))/(max(data$count+data$vol/2)-min(data$count+data$vol/2)))
+  
+  hist(sample(60:1000,1000,prob = dweibull(seq(0,100,l=941),2,20),replace = T))
+  
+#+END_SRC
+** ROCR
+   - load the package
+   - the artificial data set ~ROCR.simple~ contains measurements and labels which you can consider as /gold standard/
+   - the ~prediction()~ function takes the measurements and the gold standard as input
+   - the value returned is a list containing inter alia:
+     - measurements and labels
+     - vectors of cutoffs and the number of 
+     - false positives
+     - true positives
+     - false negatives
+     - true negatives corresponding to the resp. cutoffs
+#+BEGIN_SRC R :session :exports both :results output
+  require(ROCR,quietly=T)
+  data(ROCR.simple)
+  pred <- prediction( ROCR.simple$predictions, ROCR.simple$labels)
+  str(pred)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+ ..$ : num [1:200] 0.613 0.364 0.432 0.14 0.385 ...
+  ..@ labels     :List of 1
+  .. ..$ : Ord.factor w/ 2 levels "0"<"1": 2 2 1 1 1 2 2 2 2 1 ...
+  ..@ cutoffs    :List of 1
+  .. ..$ : num [1:201] Inf 0.991 0.985 0.985 0.983 ...
+  ..@ fp         :List of 1
+  .. ..$ : num [1:201] 0 0 0 0 1 1 2 3 3 3 ...
+  ..@ tp         :List of 1
+  .. ..$ : num [1:201] 0 1 2 3 3 4 4 4 5 6 ...
+  ..@ tn         :List of 1
+  .. ..$ : num [1:201] 107 107 107 107 106 106 105 104 104 104 ...
+  ..@ fn         :List of 1
+  .. ..$ : num [1:201] 93 92 91 90 90 89 89 89 88 87 ...
+  ..@ n.pos      :List of 1
+  .. ..$ : int 93
+  ..@ n.neg      :List of 1
+  .. ..$ : int 107
+  ..@ n.pos.pred :List of 1
+  .. ..$ : num [1:201] 0 1 2 3 4 5 6 7 8 9 ...
+  ..@ n.neg.pred :List of 1
+  .. ..$ : num [1:201] 200 199 198 197 196 195 194 193 192 191 ...
+#+end_example
+
+  - now we can use ~performance()~ to calculate different performance measures
+  - first we plot the classic ROC Curve based on sensitivity and specificity:
+    - plotting sensitivity (y-axis) against 1-specificity (x-axis) which is equivalent to
+    - true positive rate against false positive rate which is equivalent to
+#+BEGIN_SRC R :session :exports both :results output graphics :file roc1.png
+  perf <- performance(pred,"tpr","fpr")
+  plot(perf)
+#+END_SRC
+
+#+RESULTS:
+[[file:roc1.png]]
+
+  - calculate the area under the curve (AUC) (the output is a bit messy, but you find the value of interest in the slot ~y.values~
+#+BEGIN_SRC R :session :exports both :results output 
+  print(performance(pred,"auc"))
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+An object of class "performance"
+Slot "x.name":
+[1] "None"
+
+Slot "y.name":
+[1] "Area under the ROC curve"
+
+Slot "alpha.name":
+[1] "none"
+
+Slot "x.values":
+list()
+
+Slot "y.values":
+[[1]]
+[1] 0.8341875
+
+
+Slot "alpha.values":
+list()
+#+end_example
+
+  - find the /best/ cutoff (/best/ always depends on your preferences); here we put equal weight on sensitivity and specificity and maximize the sum of them (Youden Index)
+  - we write a function which takes a prediction object, the names of two performance measurements and gives back the cutoff, the maximum of the sum and the respective values of the two performance measurements
+#+BEGIN_SRC R :session :results output :exports both
+  max.ss <- function(pred,meas.1,meas.2){
+      meas.1 <- performance(pred,meas.1)
+      meas.2 <- performance(pred,meas.2)
+      x.vals <- slot(meas.1,'x.values')[[1]]
+      y.vals <- slot(meas.1,'y.values')[[1]] + slot(meas.2,'y.values')[[1]]
+      y1.vals <- slot(meas.1,'y.values')[[1]]
+      y2.vals <- slot(meas.2,'y.values')[[1]]
+      list(cut.off=x.vals[which.max(y.vals)],
+                   max.sum=max(y.vals),
+                   max.meas1=y1.vals[which.max(y.vals)],
+                   max.meas2=y2.vals[which.max(y.vals)])
+  }
+  
+  max.ss(pred,"sens","spec")
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+$cut.off
+[1] 0.5014893
+
+$max.sum
+[1] 1.69993
+
+$max.meas1
+[1] 0.8494624
+
+$max.meas2
+[1] 0.8504673
+#+end_example
+
+  - here we get a cutoff of 0.5
+  - the maximized sum is 1.70
+  - the resp. sensitivity is 0.85
+  - the resp. specificity is also 0.85
+  - sometimes we have a clear preference because the cost of a false negative is much higher than the cost of a false positive (or vice versa)
+  - therefore it exists a modified version of the Youden-Index which maximizes $sensitivity + r\cdot specificity$ where $r=\frac{1-prevalence}{cost\cdot prevalence}$ and $cost$ is the cost of a false negative and $prevalence$ is the prevalence in the population under consideration 
+
+#+BEGIN_SRC R :session :results output :exports both
+  max.ss <- function(pred,cost=1,prev=0.5){
+      r <- (1-prev)/(cost*prev)
+      sens <- performance(pred,"sens")
+      spec <- performance(pred,"spec")
+      x.vals <- slot(sens,'x.values')[[1]]
+      y.vals <- slot(sens,'y.values')[[1]] + r*slot(spec,'y.values')[[1]]
+      y1.vals <- slot(sens,'y.values')[[1]]
+      y2.vals <- slot(spec,'y.values')[[1]]
+      list(cut.off=x.vals[which.max(y.vals)],
+                   sensitivity=y1.vals[which.max(y.vals)],
+                   specificity=y2.vals[which.max(y.vals)])
+  }
+  
+  max.ss(pred)
+#+END_SRC
+
+#+RESULTS:
+: $cut.off
+: [1] 0.5014893
+: 
+: $sensitivity
+: [1] 0.8494624
+: 
+: $specificity
+: [1] 0.8504673
+
+  - with the defaults ~cost=1~ and ~prev=0.5~ we get exactly the same result (because $r=1$ in this case)
+  - if we have a disease with prevalence of 0.1 where false negatives (i.e. not detecting a true case) are more expensive 
+
+#+BEGIN_SRC R :session :results output :exports both
+    max.ss(pred,cost=20,prev=0.1)
+#+END_SRC
+
+#+RESULTS:
+: $cut.off
+: [1] 0.5014893
+: 
+: $sensitivity
+: [1] 0.8494624
+: 
+: $specificity
+: [1] 0.8504673
+
+* two plots on top of each other
+  - first create to vectors of y-values
+  - then set the margins appropriately
+  - then we plot the first series of y-values and plot the axis title
+#+BEGIN_SRC R :session :exports both :results output graphics :file two1.png :width 1000 :height 600
+  y.plot1 <- sort(runif(10))
+  y.plot2 <- runif(10)*5
+  par(mar=c(5,6,2,4))
+  plot(y.plot1,lwd = 4,ann=F,las=2,type="l")
+  mtext("y.plot1",side = 2,line=3.5)
+#+END_SRC
+
+#+RESULTS:
+[[file:two1.png]]
+
+  - now we set the graphics parameter ~new~ to ~TRUE~ ; this causes R *not* to clean the plot before the next high level graphic command
+  - then we plot the second plot without annotations (because we want the axis on the right side, which would be plotted on the left side by default)
+  - then we plot the y-axis on the right side of the plot (the for in ~axis(4, ...)~ indicates the side)  and add the annotations
+#+BEGIN_SRC R :session :exports both :results output graphics :file two2.png :width 1000 :height 600
+  par(new=T)
+  plot(y.plot2,ann=F,axes = F,col="red",type="l",lwd = 4)
+  axis(4,col="red",col.ticks = "red",lwd=3,at=0:4)
+  mtext("y.plot2",side = 4,line=3,col="red")
+#+END_SRC
+* R graphics
+** Keen Chapter 3 part 2
+Graphics out of the book /Graphics for Statistics and Data Analysis with R/ by Kevin Keen ([[http://www.unbc.ca/keen/graphics_for_statistics_and_data_analysis_with_r.html][book home page]])
+*** Figure 3.8 Bar-whisker chart
+    - we will work out the graphic on flipped axes and flip them later
+    - set the aesthetics:
+      - x to the names of the allergenes
+      - y to the percentage (prevalence)
+      - ymin to y minus the standard error and
+      - ymax to y plus the standard error
+    - using again ~geom_bar()~ with the stat="identity" option because we have already aggregated data (so the height of the bars is set by the y aesthetic)
+    - set the filling and the colour of the edges (~fill~ and ~colour~), finally adjust the width (~width~) of the bars
+    - there is no axis title on the axis with the names, so set ~xlab("")~ (remember we will flip the axis later)
+    - set the title of the continuous axis to /Percent/ and
+    - set the limits of the axis to 0 and 50
+    - set expansion of it to c(0,0) - because we did not want to expand the axis, it should actually end at 0 and 50
+    - now we flip the axes
+    - and set the appearance of the text, axis and background elements 
+#+BEGIN_SRC R :session :exports both :results output graphics :file barwhisker1.png
+  require(ggplot2)
+  
+  names<-c("Epidermals","Dust Mites","Weeds","Grasses","Molds","Trees")
+  prevs<-c(38.2,37.8,31.1,31.1,29.3,26.7)
+  se<-c(3.2,3.2,3.1,3.1,3.0,2.9)
+  
+  df <- data.frame(item=factor(1:6,labels=names),prevs=prevs,se=se)
+  
+  ggplot(df,aes(x=item,y=prevs,ymin=prevs-se,ymax=prevs+se)) +
+      geom_bar(stat="identity",fill="transparent",colour="black",width=0.7) +
+      geom_errorbar(width=0.3) +
+      xlab("") +
+      ylab("Percent") +
+      scale_y_continuous(limits=c(0,50),expand=c(0,0)) +
+      coord_flip() +
+      theme(
+          panel.background=element_blank(),
+          axis.line=element_line(colour="black"),
+          axis.line.y=element_blank(),
+          axis.text=element_text(colour="black",size=14),
+          axis.ticks.x=element_line(colour="black"),
+          axis.ticks.y=element_blank()
+          )
+#+END_SRC
+
+#+RESULTS:
+[[file:barwhisker1.png]]
+
+*** Figure 3.9 Bar and single whisker chart
+    - the same as above, only change the filling of the bars to black (you do not need the ~colour~ argument any more) and the width of the error bars to 0
+#+BEGIN_SRC R :session :exports both :results output graphics :file barwhisker2.png
+  ggplot(df,aes(x=item,y=prevs,ymin=prevs-se,ymax=prevs+se)) +
+      geom_bar(stat="identity",fill="black",width=0.7) +
+      geom_errorbar(width=0) +
+      xlab("") +
+      ylab("Percent") +
+      scale_y_continuous(limits=c(0,50),expand=c(0,0)) +
+      coord_flip() +
+      theme(
+          panel.background=element_blank(),
+          axis.line=element_line(colour="black"),
+          axis.line.y=element_blank(),
+          axis.text=element_text(colour="black",size=14),
+          axis.ticks.x=element_line(colour="black"),
+          axis.ticks.y=element_blank()
+          )
+#+END_SRC
+
+#+RESULTS:
+[[file:barwhisker2.png]]
+
+*** Figure 3.10 Dot-whisker chart
+    - for the dot-whisker chart we replace ~geom_bar()~ by ~geom_point()~
+    - in ~geom_point()~ we set the point size to four and the colour to black
+    - in ~geom_errorbar()~ we set the the width to 0.3
+    - add ~geom_vline()~ for the dotted lines and set the aesthetics ~xintercept~ to ~as.numeric(item)~ (because this aesthetic expects a numeric argument)
+    - then change some elements in the ~theme~ section
+      - set the colour in ~panel.border~ to black and do not forget to set ~fill~ to ~NA~ (you won't see anything if you don't)
+      - remove the ~axis.line.y~ line
+
+#+BEGIN_SRC R :session :exports both :results output graphics :file dotwhisker.png
+  ggplot(df,aes(x=item,y=prevs,ymin=prevs-se,ymax=prevs+se)) +
+      geom_point(colour="black",size=4) +
+      geom_errorbar(width=0.25) +
+      geom_vline(aes(xintercept=as.numeric(item)),linetype=3,size=0.4) +
+      xlab("") +
+      ylab("Percent") +
+      scale_y_continuous(limits=c(0,50),expand=c(0,0)) +
+      coord_flip() +
+      theme(
+          panel.background=element_blank(),
+          panel.border=element_rect(colour="black",fill=NA),
+          axis.line=element_line(colour="black"),
+          axis.text=element_text(colour="black",size=14),
+          axis.title=element_text(colour="black",size=14),
+          axis.ticks.x=element_line(colour="black"),
+          axis.ticks.y=element_blank()
+          )
+#+END_SRC
+
+#+RESULTS:
+[[file:dotwhisker.png]]
+
+*** Figure 3.11 Dot-whisker chart
+    - only minor changes to the previous plot
+    - remove ~geom_vline()~
+    - adjust the widths of the error bars
+
+#+BEGIN_SRC R :session :exports both :results output graphics :file dotwhisker2.png
+  ggplot(df,aes(x=item,y=prevs,ymin=prevs-se,ymax=prevs+se)) +
+      geom_point(colour="black",size=4) +
+      geom_errorbar(width=0.1) +
+      xlab("") +
+      ylab("Percent") +
+      scale_y_continuous(limits=c(0,50),expand=c(0,0)) +
+      coord_flip() +
+      theme(
+          panel.background=element_blank(),
+          panel.border=element_rect(colour="black",fill=NA),
+          axis.line=element_line(colour="black"),
+          axis.text=element_text(colour="black",size=14),
+          axis.title=element_text(colour="black",size=14),
+          axis.ticks.x=element_line(colour="black"),
+          axis.ticks.y=element_blank()
+          )
+#+END_SRC
+
+#+RESULTS:
+[[file:dotwhisker2.png]]
+
+*** Figure 3.12 Dot-whisker chart
+    - only adjust the widths of the error bars
+
+#+BEGIN_SRC R :session :exports both :results output graphics :file dotwhisker3.png
+  ggplot(df,aes(x=item,y=prevs,ymin=prevs-se,ymax=prevs+se)) +
+      geom_point(colour="black",size=4) +
+      geom_errorbar(width=0) +
+      xlab("") +
+      ylab("Percent") +
+      scale_y_continuous(limits=c(0,50),expand=c(0,0)) +
+      coord_flip() +
+      theme(
+          panel.background=element_blank(),
+          panel.border=element_rect(colour="black",fill=NA),
+          axis.line=element_line(colour="black"),
+          axis.text=element_text(colour="black",size=14),
+          axis.title=element_text(colour="black",size=14),
+          axis.ticks.x=element_line(colour="black"),
+          axis.ticks.y=element_blank()
+          )
+#+END_SRC
+
+#+RESULTS:
+[[file:dotwhisker3.png]]
+
+*** Figure 3.13 two-tiered dot-whisker chart
+    - there are several possibilities
+    - I decided to use two error bar layers so first
+    - I have to move the aesthetics for ~ymin~ and ~ymax~ to ~geom_errorbar()~, I set the ~width~ to 0.2
+    - then I add a second ~geom_errorbar()~ set there also aesthetics but now ~ymin~ to ~prevs-1.96*se~  and ~ymax~ to ~prevs+1.96*se~
+
+#+BEGIN_SRC R :session :exports both :results output graphics :file dotwhisker4.png
+  ggplot(df,aes(x=item,y=prevs)) +
+      geom_point(colour="black",size=4) +
+      geom_errorbar(aes(ymin=prevs-se,ymax=prevs+se),width=0.2) +
+      geom_errorbar(aes(ymin=prevs-1.96*se,ymax=prevs+1.96*se),width=0) +
+      xlab("") +
+      ylab("Percent") +
+      scale_y_continuous(limits=c(0,50),expand=c(0,0)) +
+      coord_flip() +
+      theme(
+          panel.background=element_blank(),
+          panel.border=element_rect(colour="black",fill=NA),
+          axis.line=element_line(colour="black"),
+          axis.text=element_text(colour="black",size=14),
+          axis.title=element_text(colour="black",size=14),
+          axis.ticks.x=element_line(colour="black"),
+          axis.ticks.y=element_blank()
+          )
+  
+#+END_SRC
+
+#+RESULTS:
+[[file:dotwhisker4.png]]
+
+** Keen Chapter 4
+*** Figure 4.17 EDF plot
+    - first set up the data frame:
+      - we use the ~ecdf()~ function to get create a stepfunction ~ecdfmass()~
+      - from this function we can extract the knots (which will be mapped to the x-axis)
+      - using this knots as arguments in ~ecdfmass()~ we'll get the belonging probabilities (which we will map to the y-axis)
+      - the ~end~ column in df contains the end points of the horizontal lines in the step function - it's only the knots vector beginning with the second element and setting the last element to ~NA~
+#+BEGIN_SRC R :session :exports both :results output 
+  mass<-c(5.9,32.0,40.0,51.5,70.0,100.0,78.0,80.0,85.0,85.0,
+          110.0,115.0,125.0,130.0,120.0,120.0,130.0,135.0,110.0,130.0,
+          150.0,145.0,150.0,170.0,225.0,145.0,188.0,180.0,197.0,218.0,
+          300.0,260.0,265.0,250.0,250.0,300.0,320.0,514.0,556.0,840.0,
+          685.0,700.0,700.0,690.0,900.0,650.0,820.0,850.0,900.0,1015.0,
+          820.0,1100.0,1000.0,1100.0,1000.0,1000.0)
+  
+  
+  ecdfmass <- ecdf(mass)
+  kn <- knots(ecdfmass)
+  ed <- ecdfmass(kn)
+  
+  df <- data.frame(knots=kn,ed=ed,end=c(kn[-1],NA))
+  head(df)
+#+END_SRC
+
+#+RESULTS:
+:   knots         ed  end
+: 1   5.9 0.01785714 32.0
+: 2  32.0 0.03571429 40.0
+: 3  40.0 0.05357143 51.5
+: 4  51.5 0.07142857 70.0
+: 5  70.0 0.08928571 78.0
+: 6  78.0 0.10714286 80.0
+
+    - now we first set the aesthetics for the points: ~x~ to ~knots~ and ~y~ to ~ed~
+    - add the point layer and setting the point size to 3: ~geom_point(size=3)~
+    - add the lines using a segment layer setting the aesthetics ~xend~ and ~yend~: ~geom_segment(aes(xend=end,yend=ed))~
+    - in the next step we add two addition segment layers, one for each arrow; you can also use ~annotate()~ to do this; inside these segments we use the ~arrow()~ function from the ~grid~ package, so we can define the appearance of our arrows
+    - the next two lines change the appearance of the axes: setting the limits, the breaks and the expansion
+    - then set the appropriate axes titles and customize axis elements and ~panel.background~ 
+
+
+#+BEGIN_SRC R :session :exports both :results output graphics :file ecdf1.png
+  require(grid) ## for the arrow() function
+  ggplot(df,aes(x=knots,y=ed)) +
+      geom_point(size=3) +
+      geom_segment(aes(xend=end,yend=ed)) +
+      geom_segment(x=min(df$knots),xend=-45,y=0,yend=0,arrow=arrow(length = unit(0.15,"cm")),size=c(0.4)) +
+      geom_segment(x=max(df$knots),xend=1245,y=1,yend=1,arrow=arrow(length = unit(0.15,"cm")),size=c(0.4)) +
+      scale_x_continuous(limits=c(-45,1245),breaks=seq(0,1200,by=200),expand=c(0,0)) +
+      scale_y_continuous(limits=c(-0.01,1.05),breaks=seq(0,1,by=0.2),expand=c(0,0)) +
+      xlab("Mass (g)") +
+      ylab("Empirical Distribution Function") +
+      theme(
+          panel.background=element_blank(),
+          axis.line=element_line(colour="black"),
+          axis.text=element_text(colour="black",size=14),
+          axis.title=element_text(colour="black",size=14),
+          axis.ticks=element_line(colour="black"),
+          axis.ticks.length=unit(3,"mm")
+          )
+#+END_SRC
+
+#+RESULTS:
+[[file:ecdf1.png]]
+
+*** Figure 4.18 EDF plot
+    - we only have to change the axis breaks of the y-axis and add the horizontal lines
+    - the first is done changing the ~by~ argument in the ~seq()~ to 0.25 in ~scale_y_continuous()~
+    - then we add a hline layer
+
+#+BEGIN_SRC R :session :exports both :results output graphics :file ecdf2.png
+  ggplot(df,aes(x=knots,y=ed)) +
+      geom_point(size=3) +
+      geom_segment(aes(xend=end,yend=ed)) +
+      geom_segment(x=min(df$knots),xend=-45,y=0,yend=0,arrow=arrow(length = unit(0.15,"cm")),size=c(0.4)) +
+      geom_segment(x=max(df$knots),xend=1245,y=1,yend=1,arrow=arrow(length = unit(0.15,"cm")),size=c(0.4)) +
+      geom_hline(yintercept=c(0.25,0.5,0.75),linetype=2) +
+      scale_x_continuous(limits=c(-45,1245),breaks=seq(0,1200,by=200),expand=c(0,0)) +
+      scale_y_continuous(limits=c(-0.01,1.05),breaks=seq(0,1,by=0.25),expand=c(0,0)) +
+      xlab("Mass (g)") +
+      ylab("Empirical Distribution Function") +
+      theme(
+          panel.background=element_blank(),
+          axis.line=element_line(colour="black"),
+          axis.text=element_text(colour="black",size=14),
+          axis.title=element_text(colour="black",size=14),
+          axis.ticks=element_line(colour="black"),
+          axis.ticks.length=unit(3,"mm")
+          )
+#+END_SRC
+
+#+RESULTS:
+[[file:ecdf2.png]]
+
+  - we also can use the grid lines (but then we have also lines at 0 and 1
+
+#+BEGIN_SRC R :session :exports both :results output graphics :file ecdf3.png
+  ggplot(df,aes(x=knots,y=ed)) +
+      geom_point(size=3) +
+      geom_segment(aes(xend=end,yend=ed)) +
+      geom_segment(x=min(df$knots),xend=-45,y=0,yend=0,arrow=arrow(length = unit(0.15,"cm")),size=c(0.4)) +
+      geom_segment(x=max(df$knots),xend=1245,y=1,yend=1,arrow=arrow(length = unit(0.15,"cm")),size=c(0.4)) +
+      scale_x_continuous(limits=c(-45,1245),breaks=seq(0,1200,by=200),expand=c(0,0)) +
+      scale_y_continuous(limits=c(-0.01,1.05),breaks=seq(0,1,by=0.25),expand=c(0,0)) +
+      xlab("Mass (g)") +
+      ylab("Empirical Distribution Function") +
+      theme(
+          panel.background=element_blank(),
+          panel.grid.major.x=element_blank(),
+          panel.grid.major.y=element_line(linetype = 2,colour="grey50"),
+          axis.line=element_line(colour="black"),
+          axis.text=element_text(colour="black",size=14),
+          axis.title=element_text(colour="black",size=14),
+          axis.ticks=element_line(colour="black"),
+          axis.ticks.length=unit(3,"mm")
+          )
+#+END_SRC
+
+#+RESULTS:
+[[file:ecdf3.png]]
+
+*** Figure 4.19 EDF plot
+    - replace ~geom_point()~ by ~geom_step()~
+    - get rid of the horizontal lines 
+    - add another little segment which connects the left arrow with the step function:   ~geom_segment(x=min(df$knots),xend=min(df$knots),y=0,yend=min(df$ed),size=0.4)~
+    - leave everything as it is 
+
+#+BEGIN_SRC R :session :exports both :results output graphics :file ecdf4.png
+  ggplot(df,aes(x=knots,y=ed)) +
+      geom_step(direction = "hv") +
+      geom_segment(x=min(df$knots),xend=-45,y=0,yend=0,arrow=arrow(length = unit(0.15,"cm")),size=c(0.4)) +
+      geom_segment(x=max(df$knots),xend=1245,y=1,yend=1,arrow=arrow(length = unit(0.15,"cm")),size=c(0.4)) +
+      geom_segment(x=min(df$knots),xend=min(df$knots),y=0,yend=min(df$ed),size=0.4) +
+      scale_x_continuous(limits=c(-45,1245),breaks=seq(0,1200,by=200),expand=c(0,0)) +
+      scale_y_continuous(limits=c(-0.01,1.05),breaks=seq(0,1,by=0.2),expand=c(0,0)) +
+      xlab("Mass (g)") +
+      ylab("Empirical Distribution Function") +
+      theme(
+          panel.background=element_blank(),
+          axis.line=element_line(colour="black"),
+          axis.text=element_text(colour="black",size=14),
+          axis.title=element_text(colour="black",size=14),
+          axis.ticks=element_line(colour="black"),
+          axis.ticks.length=unit(3,"mm")
+          )
+#+END_SRC
+
+#+RESULTS:
+[[file:ecdf4.png]]
+
+#+BEGIN_SRC R :session :exports both :results output graphics :file ecdf4.png
+  df3 <- data.frame(mass=mass)
+  ggplot(df,aes(x=knots,y=ed)) +
+      geom_step(inherit.aes=F,stat="ecdf",data=df3,aes(x=mass)) +
+      geom_segment(x=min(df$knots),xend=-45,y=0,yend=0,arrow=arrow(length = unit(0.15,"cm")),size=c(0.4)) +
+      geom_segment(x=max(df$knots),xend=1245,y=1,yend=1,arrow=arrow(length = unit(0.15,"cm")),size=c(0.4)) +
+      scale_x_continuous(limits=c(-45,1245),breaks=seq(0,1200,by=200),expand=c(0,0)) +
+      scale_y_continuous(limits=c(-0.01,1.05),breaks=seq(0,1,by=0.2),expand=c(0,0)) +
+      xlab("Mass (g)") +
+      ylab("Empirical Distribution Function") +
+      theme(
+          panel.background=element_blank(),
+          axis.line=element_line(colour="black"),
+          axis.text=element_text(colour="black",size=14),
+          axis.title=element_text(colour="black",size=14),
+          axis.ticks=element_line(colour="black"),
+          axis.ticks.length=unit(3,"mm")
+          )
+#+END_SRC
+
+*** Figure 4.20 EDF plot
+    - the last plot only with the horizontal grid lines add the quartiles
+
+#+BEGIN_SRC R :session :exports both :results output graphics :file ecdf5.png
+  ggplot(df,aes(x=knots,y=ed)) +
+      geom_step(direction = "hv") +
+      geom_segment(x=min(df$knots),xend=-45,y=0,yend=0,arrow=arrow(length = unit(0.15,"cm")),size=c(0.4)) +
+      geom_segment(x=max(df$knots),xend=1245,y=1,yend=1,arrow=arrow(length = unit(0.15,"cm")),size=c(0.4)) +
+      geom_segment(x=min(df$knots),xend=min(df$knots),y=0,yend=min(df$ed),size=0.4) +
+      geom_hline(yintercept=c(0.25,0.5,0.75),linetype=2) +
+      scale_x_continuous(limits=c(-45,1245),breaks=seq(0,1200,by=200),expand=c(0,0)) +
+      scale_y_continuous(limits=c(-0.01,1.05),breaks=seq(0,1,by=0.25),expand=c(0,0)) +
+      xlab("Mass (g)") +
+      ylab("Empirical Distribution Function") +
+      theme(
+          panel.background=element_blank(),
+          axis.line=element_line(colour="black"),
+          axis.text=element_text(colour="black",size=14),
+          axis.title=element_text(colour="black",size=14),
+          axis.ticks=element_line(colour="black"),
+          axis.ticks.length=unit(3,"mm")
+          )
+#+END_SRC
+
+#+RESULTS:
+[[file:ecdf5.png]]
+
+*** Figure 4.20 EDF plot with cumulative normal distribution function added
+    - first we need to create a second data frame containing the values defining the curve, we choose to use 10000 points on the x-axis and use ~pnorm()~ to calculate to respective y values (using the empirical mean and the empirical sd of the vector ~mass~)
+    - then we add the layer (~geom_line()~)
+    - change the limits of the x-axis and the breaks inside ~scale_x_continuous()~
+    - change the length of the right arrow (setting ~xend~ to 1500)
+
+#+BEGIN_SRC R :session :exports both :results output graphics :file ecdf6.png
+  mean_mass<-mean(mass)
+  sd_mass<-sd(mass)
+  min_mass<-min(mass)
+  max_mass<-1500
+  
+  xx <- seq(0,10000,1)*(max_mass-min_mass)/10000.+min_mass
+  yy <- pnorm(xx,mean_mass,sd_mass)
+  
+  df2 <- data.frame(xx=xx,yy=yy)
+  
+  ggplot(df,aes(x=knots,y=ed)) +
+      geom_step(direction = "hv") +
+      geom_segment(x=min(df$knots),xend=-45,y=0,yend=0,arrow=arrow(length = unit(0.15,"cm")),size=c(0.4)) +
+      geom_segment(x=max(df$knots),xend=1500,y=1,yend=1,arrow=arrow(length = unit(0.15,"cm")),size=c(0.4)) +
+      geom_segment(x=min(df$knots),xend=min(df$knots),y=0,yend=min(df$ed),size=0.4) +
+      geom_line(data=df2,aes(x=xx,y=yy)) +
+      scale_x_continuous(limits=c(-45,1500),breaks=seq(0,1500,by=500),expand=c(0,0)) +
+      scale_y_continuous(limits=c(-0.01,1.05),breaks=seq(0,1,by=0.2),expand=c(0,0)) +
+      xlab("Mass (g)") +
+      ylab("Empirical Distribution Function") +
+      theme(
+          panel.background=element_blank(),
+          axis.line=element_line(colour="black"),
+          axis.text=element_text(colour="black",size=14),
+          axis.title=element_text(colour="black",size=14),
+          axis.ticks=element_line(colour="black"),
+          axis.ticks.length=unit(3,"mm")
+          )
+#+END_SRC
+
+#+RESULTS:
+[[file:ecdf6.png]]
+
+** Keen Chapter 5
+*** Figure 5.1 normal quantile-quantile plot
+    - first set up the data vector
+    - then we use a point layer with the quantile-quantile stat and change the size of the points: ~geom_point(stat="qq",shape=1,size=3.5)~
+#+BEGIN_SRC R :session :exports both :results output graphics :file qqplot1.png :height 600 :width 600
+  require(ggplot2)
+  require(grid)
+  mass<-c(5.9,32.0,40.0,51.5,70.0,100.0,78.0,80.0,85.0,85.0,
+                110.0,115.0,125.0,130.0,120.0,120.0,130.0,135.0,110.0,130.0,
+                150.0,145.0,150.0,170.0,225.0,145.0,188.0,180.0,197.0,218.0,
+                300.0,260.0,265.0,250.0,250.0,300.0,320.0,514.0,556.0,840.0,
+                685.0,700.0,700.0,690.0,900.0,650.0,820.0,850.0,900.0,1015.0,
+                820.0,1100.0,1000.0,1100.0,1000.0,1000.0)
+  df <- data.frame(y=mass)
+  
+  ggplot(df,aes(sample=mass)) +
+      geom_point(stat="qq",shape=1,size=3.5) +
+      scale_x_continuous(limits=c(-3,3),breaks=-3:3,expand=c(0,0.1)) +
+      scale_y_continuous(limits=c(0,1200),breaks=seq(0,1200,by=200),expand=c(0,20)) +
+      xlab("Standard Normal Quantiles") +
+      ylab("Mass (g)") +
+            theme(
+            panel.background=element_blank(),
+            axis.line=element_line(colour="black"),
+            axis.text=element_text(colour="black",size=14),
+            axis.title=element_text(colour="black",size=14),
+            axis.ticks=element_line(colour="black"),
+            axis.ticks.length=unit(3,"mm")
+            )
+#+END_SRC
+
+#+RESULTS:
+[[file:qqplot1.png]]
+
+*** Figure 5.2 normal quantile-quantile plot
+    - only use ~coord_flip()~ on the previous plot
+
+#+BEGIN_SRC R :session :exports both :results output graphics :file qqplot2.png :height 600 :width 600
+  ggplot(df,aes(sample=mass)) +
+      geom_point(stat="qq",shape=1,size=3.5) +
+      scale_x_continuous(limits=c(-3,3),breaks=-2:2,expand=c(0,0.5)) +
+      scale_y_continuous(limits=c(0,1200),breaks=seq(0,1200,by=200),expand=c(0,20)) +
+      xlab("Standard Normal Quantiles") +
+      ylab("Mass (g)") +
+      coord_flip() +
+            theme(
+            panel.background=element_blank(),
+            axis.line=element_line(colour="black"),
+            axis.text=element_text(colour="black",size=14),
+            axis.title=element_text(colour="black",size=14),
+            axis.ticks=element_line(colour="black"),
+            axis.ticks.length=unit(3,"mm")
+            )
+#+END_SRC
+
+#+RESULTS:
+[[file:qqplot2.png]]
+
+*** Figure 5.3 normal quantile-quantile plot
+    - only add ~geom_abline()~ with ~intercept=mean(mass)~ and ~slope=sd(mass)~ (the line goes through the point defined by the mean of both, x and y values which is (mean(standard normal dist)=0,mean(mass)) therefore ~mean(mass)~ is the intercept; the sd of the norm is one so the slope is sd(mass)/sd(standard normal dist)=sd(mass)) 
+
+#+BEGIN_SRC R :session :exports both :results output graphics :file qqplot3.png :height 600 :width 600
+  ggplot(df,aes(sample=mass)) +
+      geom_point(stat="qq",shape=1,size=3.5) +
+      geom_abline(intercept=mean(mass),slope=sd(mass)) + 
+      scale_x_continuous(limits=c(-3,3),breaks=-3:3,expand=c(0,0.1)) +
+      scale_y_continuous(limits=c(0,1200),breaks=seq(0,1200,by=200),expand=c(0,20)) +
+      xlab("Standard Normal Quantiles") +
+      ylab("Mass (g)") +
+            theme(
+            panel.background=element_blank(),
+            axis.line=element_line(colour="black"),
+            axis.text=element_text(colour="black",size=14),
+            axis.title=element_text(colour="black",size=14),
+            axis.ticks=element_line(colour="black"),
+            axis.ticks.length=unit(3,"mm")
+            )
+#+END_SRC
+
+#+RESULTS:
+[[file:qqplot3.png]]
+
+*** Figure 5.4 gamma quantile-quantile plot
+    - first we calculate the estimates of the scale and shape parameter of the gamma dist
+    - then we only change the dist to qgamma (distribution="qgamma") and set the parameters as list (dparams=list(shape=sshape,scale=sscale))
+    - last adjust the x-axis (limits and breaks)
+#+BEGIN_SRC R :session :exports both :results output graphics :file qqplot4.png :height 600 :width 600
+  sshape<-(mean(mass)/sd(mass))**2
+  sscale<-var(mass)/mean(mass)
+  
+  ggplot(df,aes(sample=mass)) +
+      geom_point(stat="qq",distribution="qgamma",dparams=list(shape=sshape,scale=sscale),shape=1,size=3.5) +
+      scale_x_continuous(limits=c(0,1500),breaks=seq(0,1500,by=500),expand=c(0,20)) +
+      scale_y_continuous(limits=c(0,1200),breaks=seq(0,1200,by=200),expand=c(0,20)) +
+      xlab("Gamma Quantiles") +
+      ylab("Mass (g)") +
+            theme(
+            panel.background=element_blank(),
+            axis.line=element_line(colour="black"),
+            axis.text=element_text(colour="black",size=14),
+            axis.title=element_text(colour="black",size=14),
+            axis.ticks=element_line(colour="black"),
+            axis.ticks.length=unit(3,"mm")
+            )
+#+END_SRC
+
+*** Figure 5.5 normal quantile-quantile plot
+    - we only have to change the x-axis of plot 5.1
+    - so set the limits to ~c(-4,4)~ and the breaks to the required x-values by using the ~qnorm()~ function and change the labels appropriately
+    - finally change to title of the x-axis
+#+BEGIN_SRC R :session :exports both :results output graphics :file qqplot5.png :height 600 :width 600
+  ggplot(df,aes(sample=mass)) +
+      geom_point(stat="qq",shape=1,size=3.5) +
+      scale_x_continuous(limits=c(-4,4),
+                         breaks=qnorm(c(0.0001,.01,.05,.25,.50,.75,.95,.99,.9999)),
+                         labels=c(0.01,1,5,25,50,75,95,99,99.99),
+                         expand=c(0,0.1)) +
+      scale_y_continuous(limits=c(0,1200),breaks=seq(0,1200,by=200),expand=c(0,20)) +
+      xlab("Normal Percentiles") +
+      ylab("Mass (g)") +
+            theme(
+            panel.background=element_blank(),
+            axis.line=element_line(colour="black"),
+            axis.text=element_text(colour="black",size=14),
+            axis.title=element_text(colour="black",size=14),
+            axis.ticks=element_line(colour="black"),
+            axis.ticks.length=unit(3,"mm")
+            )
+#+END_SRC
+
+#+RESULTS:
+[[file:qqplot5.png]]
+
+*** Figure 5.6 normal quantile-quantile plot
+    - it is the same like plot 5.5 - only add ~coord_flip()~
+#+BEGIN_SRC R :session :exports both :results output graphics :file qqplot6.png :height 600 :width 600
+  ggplot(df,aes(sample=mass)) +
+      geom_point(stat="qq",shape=1,size=3.5) +
+      scale_x_continuous(limits=c(-4,4),
+                         breaks=qnorm(c(0.0001,.01,.05,.25,.50,.75,.95,.99,.9999)),
+                         labels=c(0.01,1,5,25,50,75,95,99,99.99),
+                         expand=c(0,0.1)) +
+      scale_y_continuous(limits=c(0,1200),breaks=seq(0,1200,by=200),expand=c(0,20)) +
+      xlab("Normal Percentiles") +
+      ylab("Mass (g)") +
+      coord_flip() +
+            theme(
+            panel.background=element_blank(),
+            axis.line=element_line(colour="black"),
+            axis.text=element_text(colour="black",size=14),
+            axis.title=element_text(colour="black",size=14),
+            axis.ticks=element_line(colour="black"),
+            axis.ticks.length=unit(3,"mm")
+            )
+#+END_SRC
+
+*** Figure 5.7 gamma quantile-quantile plot
+    - from figure 5.4 we have to change the axis and flip the coordinates:
+    - to calculate the breaks we use ~qgamma()~ with the appropriate values and the shape and scale parameter
+    - then we change the labels accordingly
+    - add ~coord_flip()~
+#+BEGIN_SRC R :session :exports both :results output graphics :file qqplot7.png :height 600 :width 600
+  sshape<-(mean(mass)/sd(mass))**2
+  sscale<-var(mass)/mean(mass)
+  
+  ggplot(df,aes(sample=mass)) +
+      geom_point(stat="qq",distribution="qgamma",dparams=list(shape=sshape,scale=sscale),shape=1,size=3.5) +
+      scale_x_continuous(limits=c(0,2400),
+                         breaks=qgamma(c(0.01,.25,.50,.75,.95,.99,.999),shape=sshape,scale=sscale),
+                         labels=c(1,25,50,75,95,99,99.9),expand=c(0,20)) +
+      scale_y_continuous(limits=c(0,1200),breaks=seq(0,1200,by=200),expand=c(0,20)) +
+      xlab("Gamma Quantiles") +
+      ylab("Mass (g)") +
+      coord_flip() +
+            theme(
+            panel.background=element_blank(),
+            axis.line=element_line(colour="black"),
+            axis.text=element_text(colour="black",size=14),
+            axis.title=element_text(colour="black",size=14),
+            axis.ticks=element_line(colour="black"),
+            axis.ticks.length=unit(3,"mm")
+            )
+#+END_SRC
+
+#+RESULTS:
+[[file:qqplot7.png]]
+
+* R functions
+** function which runs two sample t-test on grouped data frame
+   - the functions takes a data frame as its first argument
+   - the second argument /group/ is the column which should use for splitting the data frame
+   - /col/ indicates the numeric column to pass through to the t.test() function
+   - /incol/ should be a binary variable, which is also be passed through to t.test()
+
+#+BEGIN_SRC R :session :exports both :results output
+  df.t.test <- function(df,group,col,indcol){
+      t.test.helper <- function(x,col,indcol,group){
+          tob <- t.test(x[,col] ~ x[,indcol])
+          tmp <- data.frame(data = paste(col,"by",indcol),
+                            group = x[1,group],
+                            mean.group.1 = tob$estimate[1],
+                            mean.group.2 = tob$estimate[2],
+                            name.test.stat = tob$statistic,
+                            conf.lower = tob$conf.int[1],
+                            conf.upper = tob$conf.int[2],
+                            pval = tob$p.value,
+                            alternative = tob$alternative,
+                            tob$method)
+          names(tmp)[3:4] <- make.names(names(tob$estimate))
+          row.names(tmp) <- x[1,group]
+          tmp
+      }
+      df.l <- split(df[,c(col,indcol,group)],df[,group])
+      Reduce(rbind,lapply(df.l,t.test.helper,col=col,indcol=indcol,group=group))}
+
+  examp.data <- data.frame(group=gl(10,100),
+                           values=rnorm(1000),
+                           t.group=sample(letters[1:2],1000,replace=T))
+
+  df.t.test(examp.data,"group","values","t.group")
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+                data group mean.in.group.a mean.in.group.b name.test.stat
+1  values by t.group     1     -0.03010643    -0.023407084    -0.03118908
+2  values by t.group     2      0.01514159     0.002851698     0.06657077
+3  values by t.group     3     -0.03649171    -0.204602458     0.73422935
+4  values by t.group     4     -0.07577359     0.128042401    -0.94303300
+5  values by t.group     5     -0.13982781    -0.159745135     0.09668758
+6  values by t.group     6     -0.02278900     0.034996470    -0.26389934
+7  values by t.group     7      0.14170048     0.095602014     0.22600191
+8  values by t.group     8     -0.02167720     0.041918960    -0.31896880
+9  values by t.group     9      0.14063749     0.106306131     0.15517304
+10 values by t.group    10     -0.16994389     0.161857486    -1.72762447
+   conf.lower conf.upper       pval alternative              tob.method
+1  -0.4329823 0.41958357 0.97518246   two.sided Welch Two Sample t-test
+2  -0.3549451 0.37952487 0.94708484   two.sided Welch Two Sample t-test
+3  -0.2877541 0.62397557 0.46502152   two.sided Welch Two Sample t-test
+4  -0.6342923 0.22666037 0.34866070   two.sided Welch Two Sample t-test
+5  -0.3889582 0.42879285 0.92317511   two.sided Welch Two Sample t-test
+6  -0.4924124 0.37684145 0.79242103   two.sided Welch Two Sample t-test
+7  -0.3589400 0.45113698 0.82169468   two.sided Welch Two Sample t-test
+8  -0.4592634 0.33207108 0.75042947   two.sided Welch Two Sample t-test
+9  -0.4086733 0.47733601 0.87723127   two.sided Welch Two Sample t-test
+10 -0.7133264 0.04972366 0.08746682   two.sided Welch Two Sample t-test
+#+end_example
+
+* read Excel files without java or perl dependencies
+With the new package from hadley wickham it is finally possible to read excel files without java or excel dependencies, yeah... For now there are only two functions:
+- excel_sheets() to get all sheets contained in an excel file
+- read_excel() to read one sheet out of an excel file
+
+- get the filenames of excel files contained in the current directory 
+#+BEGIN_SRC R :session :exports both :results output 
+  require(readxl)
+  dir(pattern = "xls")
+#+END_SRC
+
+#+RESULTS:
+: [1] "20140927excelfile.xlsx" "example.xlsx"
+
+- get the names of the excel sheets contained in the excel file (only one in this case)
+- the function has the file name resp. the whole path as argument 
+
+#+BEGIN_SRC R :session :exports both :results output 
+  excel_sheets("example.xlsx")
+#+END_SRC
+
+#+RESULTS:
+: [1] "conspvalues"
+
+- read in the sheet, the function takes the path and the sheet as argument
+- the sheet can be given as position (first sheet = 1, second = 2, etc) or as name (the first sheet is the default)
+
+#+BEGIN_SRC R :session :exports both :results output 
+  xx <- read_excel("example.xlsx",1)
+  head(xx)
+#+END_SRC
+
+#+RESULTS:
+:    mpg cyl    disp  hp drat      wt  qsec vs am gear carb
+: 1 21.0   6     160 110 3.90    2.62 16.46  0  1    4    4
+: 2 21.0   6 missing 110 3.90   2.875 17.02  0  1    4    4
+: 3 22.8   4     108  93 3.85    2.32 18.61  1  1    4    1
+: 4 21.4   6     258 110 3.08 missing 19.44  1  0    3    1
+: 5 18.7   8     360 175 3.15    3.44 17.02  0  0    3    2
+: 6 18.1   6     225 105 2.76    3.46 20.22  1  0    3    1
+
+#+BEGIN_SRC R :session :exports both :results output 
+  xx <- read_excel("example.xlsx","conspvalues")
+  head(xx)
+#+END_SRC
+
+#+RESULTS:
+:    mpg cyl    disp  hp drat      wt  qsec vs am gear carb
+: 1 21.0   6     160 110 3.90    2.62 16.46  0  1    4    4
+: 2 21.0   6 missing 110 3.90   2.875 17.02  0  1    4    4
+: 3 22.8   4     108  93 3.85    2.32 18.61  1  1    4    1
+: 4 21.4   6     258 110 3.08 missing 19.44  1  0    3    1
+: 5 18.7   8     360 175 3.15    3.44 17.02  0  0    3    2
+: 6 18.1   6     225 105 2.76    3.46 20.22  1  0    3    1
+
+- there is an additional argument to set na strings (na)
+#+BEGIN_SRC R :session :exports both :results output 
+  xx <- read_excel("example.xlsx","conspvalues",na="missing")
+  head(xx)
+#+END_SRC
+
+#+RESULTS:
+:    mpg cyl disp  hp drat    wt  qsec vs am gear carb
+: 1 21.0   6  160 110 3.90 2.620 16.46  0  1    4    4
+: 2 21.0   6   NA 110 3.90 2.875 17.02  0  1    4    4
+: 3 22.8   4  108  93 3.85 2.320 18.61  1  1    4    1
+: 4 21.4   6  258 110 3.08    NA 19.44  1  0    3    1
+: 5 18.7   8  360 175 3.15 3.440 17.02  0  0    3    2
+: 6 18.1   6  225 105 2.76 3.460 20.22  1  0    3    1
+
+- with skip you can skip the first lines
+
+#+BEGIN_SRC R :session :exports both :results output 
+  xx <- read_excel("example.xlsx","conspvalues",skip=1)
+  head(xx)
+#+END_SRC
+
+#+RESULTS:
+:     21 6     160 110  3.9    2.62 16.46 0 1 4 4
+: 1 21.0 6 missing 110 3.90   2.875 17.02 0 1 4 4
+: 2 22.8 4     108  93 3.85    2.32 18.61 1 1 4 1
+: 3 21.4 6     258 110 3.08 missing 19.44 1 0 3 1
+: 4 18.7 8     360 175 3.15    3.44 17.02 0 0 3 2
+: 5 18.1 6     225 105 2.76    3.46 20.22 1 0 3 1
+: 6 14.3 8     360 245 3.21    3.57 15.84 0 0 3 4
+
+- and you can use col_names to tell the function whether or not the excel file containes the column names
+
+#+BEGIN_SRC R :session :exports both :results output 
+  xx <- read_excel("example.xlsx","conspvalues",skip=1, col_names=F)
+  head(xx)
+#+END_SRC
+
+#+RESULTS:
+:     X0 X1      X2  X3   X4      X5    X6 X7 X8 X9 X10
+: 1 21.0  6     160 110 3.90    2.62 16.46  0  1  4   4
+: 2 21.0  6 missing 110 3.90   2.875 17.02  0  1  4   4
+: 3 22.8  4     108  93 3.85    2.32 18.61  1  1  4   1
+: 4 21.4  6     258 110 3.08 missing 19.44  1  0  3   1
+: 5 18.7  8     360 175 3.15    3.44 17.02  0  0  3   2
+: 6 18.1  6     225 105 2.76    3.46 20.22  1  0  3   1
+
+
+- using col_types you can define the types of your columns (instead of letting R guess), attention: NA values may be produced 
+- you need one name and type for each column
+
+#+BEGIN_SRC R :session :exports both :results output 
+  xx <- read_excel("example.xlsx","conspvalues",skip=1, col_types = rep("numeric",11))
+  head(xx)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Warnmeldungen:
+1: In read_xlsx_(path, sheet, col_names = col_names, col_types = col_types,  :
+  [3, 3]: expecting numeric: got 'missing'
+2: In read_xlsx_(path, sheet, col_names = col_names, col_types = col_types,  :
+  [5, 6]: expecting numeric: got 'missing'
+    21 6 160 110  3.9  2.62 16.46 0 1 4 4
+1 21.0 6  NA 110 3.90 2.875 17.02 0 1 4 4
+2 22.8 4 108  93 3.85 2.320 18.61 1 1 4 1
+3 21.4 6 258 110 3.08    NA 19.44 1 0 3 1
+4 18.7 8 360 175 3.15 3.440 17.02 0 0 3 2
+5 18.1 6 225 105 2.76 3.460 20.22 1 0 3 1
+6 14.3 8 360 245 3.21 3.570 15.84 0 0 3 4
+#+end_example
+
+
+* label outlier in ggplot2 boxplot
+#+BEGIN_SRC R :session :exports both :results output graphics :file boxplot1.png
+  require(ggplot2)
+  require(directlabels)
+
+  mtcars$cyl <- factor(mtcars$cyl)
+  mtcars$labels <- row.names(mtcars)
+
+  p <- ggplot(mtcars,aes(x=cyl,colour=cyl,y=qsec)) +
+      geom_boxplot()
+
+
+
+  add.outlier <- function(p,labvar = as.character(p$mapping$y)){
+      y <- with(p$data,eval(p$mapping$y)) 
+      x <- with(p$data,eval(p$mapping$x))
+
+      mm <- boxplot(y ~ x,plot=F)
+      mm <- data.frame(y = mm$out,
+                       x = mm$group)
+      
+      mm$x <- factor(mm$x,levels=sort(as.numeric(unique(p$data[,as.character(p$mapping$x)]))),
+                     labels = levels(p$data[,as.character(p$mapping$x)]),
+                     )
+      
+      names(mm) <- c(as.character(p$mapping$y),as.character(p$mapping$x))
+      mm <- merge(mtcars[,c(names(mm),labvar)],mm)
+      
+      p + geom_text(data=mm,
+                    aes_string(label=labvar),
+                    vjust = -0.5)
+  }
+
+
+  add.outlier(p)
+#+END_SRC
+
+#+BEGIN_SRC R :session :exports both :results output graphics :file boxplot2.png
+  add.outlier(p,"labels")
+#+END_SRC
+
+#+RESULTS:
+[[file:boxplot2.png]]
+

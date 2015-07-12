@@ -1,0 +1,14 @@
+* basics
+** data.table
+#+BEGIN_SRC R :session
+  require(data.table)
+  dtc <- data.table(cars)
+  tables()
+  
+  dtc[2:5,]
+  
+  dtc[speed==8,]
+  
+  setkey(dtc,speed)
+  tables()
+#+END_SRC

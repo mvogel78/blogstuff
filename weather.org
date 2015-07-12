@@ -1,0 +1,96 @@
+** get weather data an from openweather via R
+   - load the rjson package which is able to parse json into R formats
+   - set the ~file~ argument to the uri
+   - within the uri you can specify the city or a weather station (see [[http://openweathermap.org/api]] for details), here are a example by station
+#+BEGIN_SRC R :session :exports both :results output
+  require(rjson)
+  tt <- fromJSON(file=
+    "http://api.openweathermap.org/data/2.5/history/station?id=7447&type=day")
+#+END_SRC  
+
+#+RESULTS:
+: Lade nötiges Paket: rjson
+
+   - the ~fromJSON()~ command converts the JSON formatted data into a list
+   - the list element named /list/ contains the weather data for one month previous in the free account
+   - the little function ~extract.temp()~ below, extracts the min and max temperature and the wind speed (together with the time) 
+#+BEGIN_SRC R :session :exports both :results output  
+  extract.temp <- function(x){
+      return(data.frame(min=x$temp$mi-273.15,
+                        max=x$temp$ma-273.15,
+                        wind=unlist(x$wind$speed[1]),
+                        tstmp=x$dt))
+  }
+  
+  temps <- Reduce(rbind,lapply(tt$list , extract.temp))
+  temps$tstmp <- as.Date(as.POSIXct(temps$tstmp,
+                         origin = as.Date("1970-01-01")))
+  head(temps)
+#+END_SRC  
+
+#+RESULTS:
+:    min max wind      tstmp
+: v   16  26 1.42 2014-10-05
+: v1  12  23 2.31 2014-10-06
+: v2  14  24 2.12 2014-10-07
+: v3  15  25 3.14 2014-10-08
+: v4  15  25 3.33 2014-10-09
+: v5  16  25 3.14 2014-10-10
+
+   - now we plot the data using the ~symbols()~ command, plotting wind speed on the y-axis and time on the x-axis (there is some mix-up because of the the beginning of winter time (from daylight saving time) on oct, 26th
+
+#+BEGIN_SRC R :session :exports both :file temp.png :results graphics :width 1000 :height 600
+  nod <- length(tt$list)
+  
+  symbols(x=temps$tstmp,
+          y=temps$wind,
+          thermometers = cbind(.4,1.6,temps$min/40,temps$max/40),
+          fg = "red",
+          ylim = c(-0.5,max(temps$wind)+1),
+          xaxt="n",
+          xlab = "day", ylab="wind speed",
+          main="Temperature of the last 30 days")
+  axis(1,at=temps$tstmp,labels=
+                  substr(as.character(temps$tstmp),6,10),las=2)
+  
+   text(x=temps$tstmp,
+        y=temps$wind-0.5,rep(0,nod),adj=c(0.5,0))
+   text(x=temps$tstmp,
+        y=temps$wind+0.5,rep(40,nod),adj=c(0.5,0))
+   text(x=temps$tstmp,
+        y=temps$wind,rep(20,nod),adj=c(0.5,0.5))
+  
+#+END_SRC
+
+#+RESULTS:
+[[file:temp.png]]
+
+
+  - with the little function below you can find the station ids by lat and lon
+
+#+BEGIN_SRC R :session :exports both :results output
+  get.station <- function(lat,lon){
+      tmpdat <- fromJSON(file=
+       paste0("http://api.openweathermap.org/data/2.5/station/find?lat=",lat,
+              "&lon=",lon,"&cnt=1"))
+      print(paste("found:",tmpdat[[1]]$station$name,", id:",tmpdat[[1]]$station$id))
+      tmpdat[[1]]$station$id
+  }
+  
+  station <- get.station(lat=34,lon=118.3)
+  station
+#+END_SRC
+
+#+RESULTS:
+: [1] "found: ZSNJ , id: 7447"
+: [1] 7447
+
+
+#+BEGIN_SRC R :session :exports both :results output
+  get.station(51.5,0.1)
+#+END_SRC
+
+#+RESULTS:
+: [1] "found: EGLC , id: 5091"
+: [1] 5091
+
