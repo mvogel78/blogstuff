@@ -1252,38 +1252,46 @@ Warnmeldungen:
 * label outlier in ggplot2 boxplot
 #+BEGIN_SRC R :session :exports both :results output graphics :file boxplot1.png
   require(ggplot2)
-  require(directlabels)
-
+  
   mtcars$cyl <- factor(mtcars$cyl)
   mtcars$labels <- row.names(mtcars)
-
-  p <- ggplot(mtcars,aes(x=cyl,colour=cyl,y=qsec)) +
-      geom_boxplot()
-
-
-
+  
+  
+  
+  
+  
   add.outlier <- function(p,labvar = as.character(p$mapping$y)){
       y <- with(p$data,eval(p$mapping$y)) 
       x <- with(p$data,eval(p$mapping$x))
-
-      mm <- boxplot(y ~ x,plot=F)
-      mm <- data.frame(y = mm$out,
-                       x = mm$group)
+  
+      mm <- Reduce(rbind,tapply(y,x,FUN = function(y){
+                              data.frame(y = y[y <= (fivenum(y)[2] - 1.5 * IQR(y)) | y >= (fivenum(y)[4] + 1.5 * IQR(y))],
+                                         x = x[y <= (fivenum(y)[2] - 1.5 * IQR(y)) | y >= (fivenum(y)[4] + 1.5 * IQR(y))])}))
+  
       
-      mm$x <- factor(mm$x,levels=sort(as.numeric(unique(p$data[,as.character(p$mapping$x)]))),
+      mm$x <- factor(mm$x,levels=sort(as.numeric(as.character(unique(p$data[,as.character(p$mapping$x)])))),
                      labels = levels(p$data[,as.character(p$mapping$x)]),
                      )
       
       names(mm) <- c(as.character(p$mapping$y),as.character(p$mapping$x))
-      mm <- merge(mtcars[,c(names(mm),labvar)],mm)
+      mm <- merge(p$data[,c(names(mm),labvar)],mm)
       
       p + geom_text(data=mm,
                     aes_string(label=labvar),
                     vjust = -0.5)
   }
-
-
+  
+  
+  p <- ggplot(mtcars,aes(x=cyl,colour=cyl,y=mpg)) +
+      geom_boxplot()
+  
+  add.outlier(p,"labels")
+  
   add.outlier(p)
+  
+  
+  
+  
 #+END_SRC
 
 #+BEGIN_SRC R :session :exports both :results output graphics :file boxplot2.png
