@@ -1248,7 +1248,6 @@ Warnmeldungen:
 6 14.3 8 360 245 3.21 3.570 15.84 0 0 3 4
 #+end_example
 
-
 * label outlier in ggplot2 boxplot
 #+BEGIN_SRC R :session :exports both :results output graphics :file boxplot1.png
   require(ggplot2)
@@ -1257,20 +1256,21 @@ Warnmeldungen:
   mtcars$labels <- row.names(mtcars)
   
   
-  
-  
-  
   add.outlier <- function(p,labvar = as.character(p$mapping$y)){
-      y <- with(p$data,eval(p$mapping$y)) 
-      x <- with(p$data,eval(p$mapping$x))
+      df <- data.frame(y = with(p$data,eval(p$mapping$y)),
+                       x = with(p$data,eval(p$mapping$x)))
   
-      mm <- Reduce(rbind,tapply(y,x,FUN = function(y){
-                              data.frame(y = y[y <= (fivenum(y)[2] - 1.5 * IQR(y)) | y >= (fivenum(y)[4] + 1.5 * IQR(y))],
-                                         x = x[y <= (fivenum(y)[2] - 1.5 * IQR(y)) | y >= (fivenum(y)[4] + 1.5 * IQR(y))])}))
+      df.l <- split(df,df$x)
+      
+      mm <- Reduce(rbind, lapply(df.l,FUN = function(df){
+                                     data.frame(y = df$y[df$y < (quantile(df$y)[2] - 1.5 * IQR(df$y)) | df$y > (quantile(df$y)[4] + 1.5 * IQR(df$y))],
+                                                x = df$x[df$y < (quantile(df$y)[2] - 1.5 * IQR(df$y)) | df$y > (quantile(df$y)[4] + 1.5 * IQR(df$y))]
+                                                )})
+                   )
   
       
       mm$x <- factor(mm$x,levels=sort(as.numeric(as.character(unique(p$data[,as.character(p$mapping$x)])))),
-                     labels = levels(p$data[,as.character(p$mapping$x)]),
+                     labels = levels(p$data[,as.character(p$mapping$x)])
                      )
       
       names(mm) <- c(as.character(p$mapping$y),as.character(p$mapping$x))
@@ -1282,6 +1282,7 @@ Warnmeldungen:
   }
   
   
+  
   p <- ggplot(mtcars,aes(x=cyl,colour=cyl,y=mpg)) +
       geom_boxplot()
   
@@ -1291,7 +1292,24 @@ Warnmeldungen:
   
   
   
+  data <- data.frame(x = factor(sample(1:10,1000,replace = T)),y = rnorm(1000))
+  data <- data.frame(x = sample(1:10,1000,replace = T),y = rnorm(1000))
   
+  
+  p <- ggplot(data,aes(x=x,colour=x,y=y)) +
+      geom_boxplot()
+  
+  add.outlier(p)
+  
+  data <- read.delim("clipboard")
+  
+  data$timepoint <- factor(data$timepoint)
+  
+  p <- ggplot(data,aes(x=timepoint,colour=timepoint,y=STAI_score)) +
+      geom_boxplot()
+  add.outlier(p, "ID")
+  
+  ggsave("bild.png")
 #+END_SRC
 
 #+BEGIN_SRC R :session :exports both :results output graphics :file boxplot2.png
